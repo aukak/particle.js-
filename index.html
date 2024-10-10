@@ -1,0 +1,248 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tParticle.js</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        user-select: none;
+        background: #000000;        
+      } 
+      canvas { display: block; }
+      .title._1 { 
+        position: absolute;
+        font-family: Arial;
+        color: #fff;
+        font-size: .8rem;
+        mix-blend-mode:normal;
+        top: 20px; 
+        left: 30px;
+        cursor: pointer; 
+      }
+      .title._2 { 
+        position: absolute;
+        font-family: Arial;
+        color: #fff;
+        font-size: .8rem;
+        mix-blend-mode:normal;
+        bottom: 20px; 
+        left: 30px;
+        cursor: pointer; 
+      }
+      .title._3 { 
+        position: absolute;
+        font-family: Arial;
+        color: #fff;
+        font-size: .8rem;
+        mix-blend-mode:normal;
+        bottom: 20px; 
+        right: 30px; 
+        cursor: pointer; 
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      import * as THREE from 'https://cdn.skypack.dev/three@0.136.0/build/three.module.js';
+      import { OrbitControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/OrbitControls.js';
+      import { UnrealBloomPass } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+      import { EffectComposer } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/postprocessing/EffectComposer.js';
+      import { RenderPass } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/postprocessing/RenderPass.js';
+      import { ShaderPass } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/postprocessing/ShaderPass.js';
+      import { FXAAShader } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/shaders/FXAAShader.js';
+      import * as dat from 'https://cdn.skypack.dev/dat.gui';
+
+      // Scene setup
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.5;
+      controls.enableZoom = true;
+      controls.minDistance = 10;
+      controls.maxDistance = 50; 
+      
+      // Particle system
+      
+      const particleGeometry = new THREE.SphereGeometry(.2, 8, 8);
+      let particles = [];
+      const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+      const particleGroup = new THREE.Group();
+      scene.add(particleGroup);
+
+      function createParticles(count) {
+        particleGroup.clear();
+        particles = [];
+        for (let i = 0; i < count; i++) {
+          const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+          particle.position.set(
+            (Math.random() - 0.5) * 100,
+            (Math.random() - 0.5) * 100,
+            (Math.random() - 0.5) * 100
+          );
+          particles.push({
+            mesh: particle,
+            velocity: new THREE.Vector3(
+              (Math.random() - 0.5) * 0.2,
+              (Math.random() - 0.5) * 0.2,
+              (Math.random() - 0.5) * 0.2
+            )
+          });
+          particleGroup.add(particle);
+        }
+      }
+
+      createParticles(500);
+
+      camera.position.z = 50;
+
+      const composer = new EffectComposer(renderer);
+      const renderPass = new RenderPass(scene, camera);
+      composer.addPass(renderPass);
+
+      const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+      composer.addPass(bloomPass);
+
+      const fxaaPass = new ShaderPass(FXAAShader);
+      fxaaPass.material.uniforms['resolution'].value.set(1 / window.innerWidth, 1 / window.innerHeight);
+      composer.addPass(fxaaPass);
+
+      const simulatorSettings = {
+        speed: 1.0,
+        dieSpeed: 0.1,
+        radius: 50,
+        curlSize: 0.3,
+        attraction: 0.02,
+        particleCount: 500,
+        followMouse: false
+      };
+
+      const renderingSettings = {
+        baseColor: 0xffffff,
+        fadeColor: 0x000000,
+        backgroundColor: 0x101010,
+        shadow: false
+      };
+
+      const postProcessingSettings = {
+        fxaa: true,
+        bloom: true,
+        bloomRadius: 0.85,
+        bloomAmount: 1.5
+      };
+
+      const gui = new dat.GUI();
+
+      const simulatorFolder = gui.addFolder('Simulator');
+      simulatorFolder.add(simulatorSettings, 'speed', 0.1, 0.5).onChange(updateParticleSpeed);
+      simulatorFolder.add(simulatorSettings, 'dieSpeed', 0.01, 1);
+      simulatorFolder.add(simulatorSettings, 'radius', 10, 100).onChange(updateParticleRadius);
+      simulatorFolder.add(simulatorSettings, 'curlSize', 0.1, 1);
+      simulatorFolder.add(simulatorSettings, 'attraction', 0.01, 0.1);
+      simulatorFolder.add(simulatorSettings, 'particleCount', 100, 2000).step(100).onChange(createParticles);
+      simulatorFolder.add(simulatorSettings, 'followMouse');
+
+      const renderingFolder = gui.addFolder('Rendering');
+      renderingFolder.addColor(renderingSettings, 'baseColor').onChange(updateParticleColor);
+      renderingFolder.addColor(renderingSettings, 'fadeColor');
+      renderingFolder.addColor(renderingSettings, 'backgroundColor').onChange(updateBackgroundColor);
+      renderingFolder.add(renderingSettings, 'shadow');
+
+      const postProcessingFolder = gui.addFolder('Post-Processing');
+      postProcessingFolder.add(postProcessingSettings, 'fxaa').onChange(toggleFXAA);
+      postProcessingFolder.add(postProcessingSettings, 'bloom').onChange(toggleBloom);
+      postProcessingFolder.add(postProcessingSettings, 'bloomRadius', 0.1, 2.0).onChange((value) => bloomPass.radius = value);
+      postProcessingFolder.add(postProcessingSettings, 'bloomAmount', 0.1, 3.0).onChange((value) => bloomPass.strength = value);
+
+      function updateParticleSpeed(value) {
+        particles.forEach(p => {
+          p.velocity.multiplyScalar(value);
+        });
+      }
+
+      function updateParticleRadius(value) {
+        particleGroup.children.forEach(p => {
+          p.scale.setScalar(value / 50); 
+        });
+      }
+
+      function updateParticleColor(value) {
+        particleMaterial.color.set(value);
+      }
+
+      function updateBackgroundColor(value) {
+        scene.background = new THREE.Color(value);
+      }
+
+      function toggleFXAA(value) {
+        fxaaPass.enabled = value;
+      }
+
+      function toggleBloom(value) {
+        bloomPass.enabled = value;
+      }
+
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        particles.forEach(particle => {
+          particle.mesh.position.add(particle.velocity);
+          // Bounce off walls
+          if (particle.mesh.position.length() > simulatorSettings.radius) {
+            particle.velocity.negate();
+          }
+        });
+        composer.render();
+      }
+
+      animate();
+
+      window.addEventListener('resize', function () {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+
+      createTitles()
+      function createTitles() {
+        const title1 = document.createElement('h3');
+        title1.classList.add('title', '_1');
+        title1.textContent = 'three.js + Interactive Particle Simulator and dat.GUI';
+
+        const title2 = document.createElement('h3');
+        title2.classList.add('title', '_2');
+        // title2.textContent = 'double click';
+
+        const title3 = document.createElement('h3');
+        title3.classList.add('title', '_3');
+        title3.textContent = 'Fullscreen on';
+        title3.addEventListener('click', toggleFullscreen);
+
+        document.body.appendChild(title1);
+        document.body.appendChild(title2);
+        document.body.appendChild(title3);
+      }
+
+      function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen();
+          document.querySelector('.title._3').textContent = 'Fullscreen off';
+        } else if (document.exitFullscreen) {
+          document.exitFullscreen();
+          document.querySelector('.title._3').textContent = 'Fullscreen on';
+        }
+      }
+
+    </script>
+  </body>
+</html>
